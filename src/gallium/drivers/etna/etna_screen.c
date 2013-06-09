@@ -56,7 +56,7 @@ static const char *etna_screen_get_vendor( struct pipe_screen *screen )
 
 static int etna_screen_get_param( struct pipe_screen *screen, enum pipe_cap param )
 {
-    struct etna_screen *priv = etna_screen(screen);
+    /* struct etna_screen *priv = etna_screen(screen); */
     switch (param) {
     /* Supported features (boolean caps). */
     case PIPE_CAP_TWO_SIDED_STENCIL:
@@ -77,14 +77,16 @@ static int etna_screen_get_param( struct pipe_screen *screen, enum pipe_cap para
     case PIPE_CAP_TGSI_TEXCOORD: /* explicit TEXCOORD and POINTCOORD semantics */
             return 1;
 
+    /* Memory */
     case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
             return 256;
-
+    case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+            return 4; /* XXX could easily be supported */
     case PIPE_CAP_GLSL_FEATURE_LEVEL:
             return 120;
 
-    case PIPE_CAP_NPOT_TEXTURES:
-            return VIV_FEATURE(priv->dev, chipMinorFeatures1, NON_POWER_OF_TWO);
+    case PIPE_CAP_NPOT_TEXTURES: /* MUST be supported with GLES 2.0 */
+            return true; /* VIV_FEATURE(priv->dev, chipMinorFeatures1, NON_POWER_OF_TWO); */
 
     /* Unsupported features. */
     case PIPE_CAP_TEXTURE_SWIZZLE: /* XXX supported on gc2000 */
@@ -113,6 +115,7 @@ static int etna_screen_get_param( struct pipe_screen *screen, enum pipe_cap para
     case PIPE_CAP_VERTEX_COLOR_CLAMPED:
     case PIPE_CAP_USER_VERTEX_BUFFERS:
     case PIPE_CAP_USER_INDEX_BUFFERS:
+    case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
             return 0;
 
     /* Stream output. */
@@ -132,6 +135,14 @@ static int etna_screen_get_param( struct pipe_screen *screen, enum pipe_cap para
             return 0;
     case PIPE_CAP_MAX_COMBINED_SAMPLERS:
             return 12; /* XXX depends on caps */
+    case PIPE_CAP_CUBE_MAP_ARRAY:
+            return 0;
+    case PIPE_CAP_MIN_TEXEL_OFFSET:
+            return -8;
+    case PIPE_CAP_MAX_TEXEL_OFFSET:
+            return 7;
+    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+            return 0;
 
     /* Render targets. */
     case PIPE_CAP_MAX_RENDER_TARGETS:
@@ -142,12 +153,12 @@ static int etna_screen_get_param( struct pipe_screen *screen, enum pipe_cap para
     case PIPE_CAP_OCCLUSION_QUERY:
     case PIPE_CAP_QUERY_TIMESTAMP:
             return 0;
+    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+            return 0;
 
-    case PIPE_CAP_MIN_TEXEL_OFFSET:
-            return -8;
-
-    case PIPE_CAP_MAX_TEXEL_OFFSET:
-            return 7;
+    /* Preferences */
+    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+            return 1;
 
     default:
             DBG("unknown param %d", param);
@@ -281,8 +292,8 @@ static boolean etna_screen_is_format_supported( struct pipe_screen *screen,
     struct etna_screen *priv = etna_screen(screen);
     unsigned allowed = 0;
     if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
-                (sample_count > 1) || /* TODO add MSAA */
-                !util_format_is_supported(format, usage)) {
+                (sample_count > 1) /* TODO add MSAA */) 
+    {
         DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
                         util_format_name(format), target, sample_count, usage);
         return FALSE;
@@ -291,7 +302,7 @@ static boolean etna_screen_is_format_supported( struct pipe_screen *screen,
     if (usage & PIPE_BIND_RENDER_TARGET)
     {
         /* if render target, must be RS-supported format */
-        if(translate_rt_format(format) != ETNA_NO_MATCH)
+        if(translate_rt_format(format, true) != ETNA_NO_MATCH)
         {
             allowed |= PIPE_BIND_RENDER_TARGET;
         }
@@ -299,7 +310,7 @@ static boolean etna_screen_is_format_supported( struct pipe_screen *screen,
     if (usage & PIPE_BIND_DEPTH_STENCIL)
     {
         /* must be supported depth format */
-        if(translate_depth_format(format) != ETNA_NO_MATCH)
+        if(translate_depth_format(format, true) != ETNA_NO_MATCH)
         {
             allowed |= PIPE_BIND_DEPTH_STENCIL;
         }
@@ -307,7 +318,7 @@ static boolean etna_screen_is_format_supported( struct pipe_screen *screen,
     if (usage & PIPE_BIND_SAMPLER_VIEW)
     {
         /* must be supported texture format */
-        if(translate_texture_format(format) != ETNA_NO_MATCH)
+        if(translate_texture_format(format, true) != ETNA_NO_MATCH)
         {
             allowed |= PIPE_BIND_SAMPLER_VIEW;
         }
@@ -315,7 +326,7 @@ static boolean etna_screen_is_format_supported( struct pipe_screen *screen,
     if (usage & PIPE_BIND_VERTEX_BUFFER)
     {
         /* must be supported vertex format */
-        if(translate_vertex_format_type(format) == ETNA_NO_MATCH)
+        if(translate_vertex_format_type(format, true) == ETNA_NO_MATCH)
         {
             allowed |= PIPE_BIND_VERTEX_BUFFER;
         }
@@ -512,6 +523,7 @@ static struct pipe_resource * etna_screen_resource_create(struct pipe_screen *sc
 
     resource->base = *templat;
     resource->base.last_level = ix; /* real last mipmap level */
+    resource->base.screen = screen;
     resource->layout = layout;
     resource->surface = rt;
     resource->ts = rt_ts;
