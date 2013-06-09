@@ -195,10 +195,10 @@ static void etna_link_shaders(struct pipe_context *pipe,
     /* reference instruction memory */
 #if 0
     {
-        int fd=creat("/mnt/sdcard/shader_vs.bin", 0777);
+        int fd=creat("/tmp/shader_vs.bin", 0777);
         write(fd, vs->code, vs->code_size*4);
         close(fd);
-        fd=creat("/mnt/sdcard/shader_ps.bin", 0777);
+        fd=creat("/tmp/shader_ps.bin", 0777);
         write(fd, fs->code, fs->code_size*4);
         close(fd);
     }
@@ -1149,7 +1149,8 @@ static void etna_pipe_clear(struct pipe_context *pipe,
              unsigned stencil)
 {
     struct etna_pipe_context_priv *priv = ETNA_PIPE(pipe);
-    /* XXX need to update clear command in non-TS (fast clear) case *if*
+    printf("Pipe clear\n");
+    /* Need to update clear command in non-TS (fast clear) case *if*
      * clear value is different from previous time. 
      */
     if(buffers & PIPE_CLEAR_COLOR)
