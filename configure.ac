@@ -1413,6 +1413,9 @@ AC_SUBST([LLVM_INCLUDEDIR])
 AC_SUBST([LLVM_VERSION])
 AC_SUBST([CLANG_RESOURCE_DIR])
 
+AC_SUBST([ETNA_LIBS])
+AC_SUBST([ETNA_CFLAGS])
+
 case "x$enable_opengl$enable_gles1$enable_gles2" in
 x*yes*)
     EGL_CLIENT_APIS="$EGL_CLIENT_APIS "'$(GL_LIB)'
@@ -2082,6 +2085,7 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/tests/trivial/Makefile
 		src/gallium/tests/unit/Makefile
 		src/gallium/winsys/Makefile
+		src/gallium/winsys/etna/drm/Makefile
 		src/gallium/winsys/freedreno/drm/Makefile
 		src/gallium/winsys/i915/drm/Makefile
 		src/gallium/winsys/i915/sw/Makefile

@@ -47,6 +47,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <stdio.h>
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
@@ -55,7 +56,20 @@
 
 #include "common/native.h"
 #include "common/native_helper.h"
+
+#define ETNA  /* Use ETNA instead of swrast driver */
+
+#ifndef ETNA
 #include "fbdev/fbdev_sw_winsys.h"
+#else
+/* for pipe_screen::flush_frontbuffer */
+struct fbdev_etna_drawable {
+   enum pipe_format format;
+   unsigned x, y;
+   unsigned width, height;
+   size_t smem_start, smem_len, line_length;
+};
+#endif
 
 struct fbdev_display {
    struct native_display base;
@@ -79,7 +93,11 @@ struct fbdev_surface {
 
    unsigned int sequence_number;
 
+#ifdef ETNA
+   struct fbdev_etna_drawable drawable;
+#else
    struct fbdev_sw_drawable drawable;
+#endif
 };
 
 static INLINE struct fbdev_display *
@@ -147,7 +165,9 @@ vinfo_to_format(const struct fb_var_screeninfo *vinfo)
 
 static boolean
 fbdev_surface_update_drawable(struct native_surface *nsurf,
-                              const struct fb_var_screeninfo *vinfo)
+                              const struct fb_var_screeninfo *vinfo,
+                              const struct fb_fix_screeninfo *finfo
+                              )
 {
    struct fbdev_surface *fbsurf = fbdev_surface(nsurf);
    unsigned x, y, width, height;
@@ -176,6 +196,11 @@ fbdev_surface_update_drawable(struct native_surface *nsurf,
    fbsurf->drawable.y = vinfo->yoffset;
    fbsurf->drawable.width = vinfo->xres;
    fbsurf->drawable.height = vinfo->yres;
+#ifdef ETNA
+   fbsurf->drawable.smem_start = finfo->smem_start;
+   fbsurf->drawable.smem_len = finfo->smem_len;
+   fbsurf->drawable.line_length = finfo->line_length;
+#endif
 
    return (fbsurf->drawable.format != PIPE_FORMAT_NONE &&
            fbsurf->drawable.width &&
@@ -203,7 +228,7 @@ fbdev_surface_present(struct native_surface *nsurf,
          return FALSE;
 
       /* present the surface */
-      if (fbdev_surface_update_drawable(&fbsurf->base, &vinfo)) {
+      if (fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
          ret = resource_surface_present(fbsurf->rsurf,
                ctrl->natt, (void *) &fbsurf->drawable);
       }
@@ -277,7 +302,7 @@ fbdev_display_create_window_surface(struct native_display *ndpy,
    fbsurf->width = vinfo.xres;
    fbsurf->height = vinfo.yres;
 
-   if (!fbdev_surface_update_drawable(&fbsurf->base, &vinfo)) {
+   if (!fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
       FREE(fbsurf);
       return NULL;
    }
@@ -420,16 +445,21 @@ static boolean
 fbdev_display_init_screen(struct native_display *ndpy)
 {
    struct fbdev_display *fbdpy = fbdev_display(ndpy);
+#ifndef ETNA
    struct sw_winsys *ws;
-
    ws = fbdev_create_sw_winsys(fbdpy->fd);
    if (!ws)
       return FALSE;
 
    fbdpy->base.screen = fbdpy->event_handler->new_sw_screen(&fbdpy->base, ws);
+#else
+   fbdpy->base.screen = fbdpy->event_handler->new_drm_screen(&fbdpy->base, "etna", 0);
+#endif
    if (!fbdpy->base.screen) {
+#ifndef ETNA
       if (ws->destroy)
          ws->destroy(ws);
+#endif
       return FALSE;
    }
 
