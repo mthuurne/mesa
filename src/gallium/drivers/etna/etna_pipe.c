@@ -839,14 +839,20 @@ static void *etna_pipe_create_vertex_elements_state(struct pipe_context *pipe,
     //struct etna_pipe_context_priv *priv = ETNA_PIPE(pipe);
     struct compiled_vertex_elements_state *cs = CALLOC_STRUCT(compiled_vertex_elements_state);
     /* VERTEX_ELEMENT_STRIDE is in pipe_vertex_buffer */
+    /* XXX could minimize number of consecutive stretches here by sorting, and 
+     * permuting or does Mesa do this already? */
     cs->num_elements = num_elements;
+    unsigned start_offset = 0; /* start of current consecutive stretch */
+    bool nonconsecutive = true; /* previous value of nonconsecutive */
     for(unsigned idx=0; idx<num_elements; ++idx)
     {
         unsigned element_size = util_format_get_blocksize(elements[idx].src_format);
         unsigned end_offset = elements[idx].src_offset + element_size;
+        if(nonconsecutive)
+            start_offset = elements[idx].src_offset;
         assert(element_size != 0 && end_offset <= 256); /* maximum vertex size is 256 bytes */
         /* check whether next element is consecutive to this one */
-        bool nonconsecutive = (idx == (num_elements-1)) || 
+        nonconsecutive = (idx == (num_elements-1)) || 
                     elements[idx+1].vertex_buffer_index != elements[idx].vertex_buffer_index ||
                     end_offset != elements[idx+1].src_offset;
         SET_STATE(FE_VERTEX_ELEMENT_CONFIG[idx], 
@@ -857,7 +863,7 @@ static void *etna_pipe_create_vertex_elements_state(struct pipe_context *pipe,
                 VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN(ENDIAN_MODE_NO_SWAP) |
                 VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM(elements[idx].vertex_buffer_index) |
                 VIVS_FE_VERTEX_ELEMENT_CONFIG_START(elements[idx].src_offset) |
-                VIVS_FE_VERTEX_ELEMENT_CONFIG_END(end_offset));
+                VIVS_FE_VERTEX_ELEMENT_CONFIG_END(end_offset - start_offset));
     }
     return cs;
 }
