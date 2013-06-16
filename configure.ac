@@ -2086,6 +2086,7 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/tests/unit/Makefile
 		src/gallium/winsys/Makefile
 		src/gallium/winsys/etna/drm/Makefile
+		src/gallium/winsys/etna/fbdev/Makefile
 		src/gallium/winsys/freedreno/drm/Makefile
 		src/gallium/winsys/i915/drm/Makefile
 		src/gallium/winsys/i915/sw/Makefile

@@ -62,13 +62,7 @@
 #ifndef ETNA
 #include "fbdev/fbdev_sw_winsys.h"
 #else
-/* for pipe_screen::flush_frontbuffer */
-struct fbdev_etna_drawable {
-   enum pipe_format format;
-   unsigned x, y;
-   unsigned width, height;
-   size_t smem_start, smem_len, line_length;
-};
+#include "etna_fbdev_public.h"
 #endif
 
 struct fbdev_display {
@@ -94,7 +88,7 @@ struct fbdev_surface {
    unsigned int sequence_number;
 
 #ifdef ETNA
-   struct fbdev_etna_drawable drawable;
+   struct etna_fbdev_drawable *drawable;
 #else
    struct fbdev_sw_drawable drawable;
 #endif
@@ -162,7 +156,7 @@ vinfo_to_format(const struct fb_var_screeninfo *vinfo)
 
    return format;
 }
-
+#ifndef ETNA
 static boolean
 fbdev_surface_update_drawable(struct native_surface *nsurf,
                               const struct fb_var_screeninfo *vinfo,
@@ -196,16 +190,12 @@ fbdev_surface_update_drawable(struct native_surface *nsurf,
    fbsurf->drawable.y = vinfo->yoffset;
    fbsurf->drawable.width = vinfo->xres;
    fbsurf->drawable.height = vinfo->yres;
-#ifdef ETNA
-   fbsurf->drawable.smem_start = finfo->smem_start;
-   fbsurf->drawable.smem_len = finfo->smem_len;
-   fbsurf->drawable.line_length = finfo->line_length;
-#endif
 
    return (fbsurf->drawable.format != PIPE_FORMAT_NONE &&
            fbsurf->drawable.width &&
            fbsurf->drawable.height);
 }
+#endif
 
 static boolean
 fbdev_surface_present(struct native_surface *nsurf,
@@ -226,12 +216,18 @@ fbdev_surface_present(struct native_surface *nsurf,
       memset(&vinfo, 0, sizeof(vinfo));
       if (ioctl(fbdpy->fd, FBIOGET_VSCREENINFO, &vinfo))
          return FALSE;
-
       /* present the surface */
+#ifdef ETNA
+      if (etna_fbdev_drawable_update(fbsurf->drawable, &vinfo, &fbdpy->finfo)) {
+         ret = resource_surface_present(fbsurf->rsurf,
+               ctrl->natt, etna_fbdev_get_front_buffer(fbsurf->drawable));
+      }
+#else
       if (fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
          ret = resource_surface_present(fbsurf->rsurf,
                ctrl->natt, (void *) &fbsurf->drawable);
       }
+#endif
 
       fbsurf->width = vinfo.xres;
       fbsurf->height = vinfo.yres;
@@ -246,8 +242,13 @@ fbdev_surface_present(struct native_surface *nsurf,
    }
    else {
       /* the drawable never changes */
+#ifdef ETNA
+      ret = resource_surface_present(fbsurf->rsurf,
+            ctrl->natt, etna_fbdev_get_front_buffer(fbsurf->drawable));
+#else
       ret = resource_surface_present(fbsurf->rsurf,
             ctrl->natt, (void *) &fbsurf->drawable);
+#endif
    }
 
    return ret;
@@ -265,6 +266,9 @@ fbdev_surface_destroy(struct native_surface *nsurf)
    struct fbdev_surface *fbsurf = fbdev_surface(nsurf);
 
    resource_surface_destroy(fbsurf->rsurf);
+#ifdef ETNA
+   etna_fbdev_drawable_destroy(fbsurf->drawable);
+#endif
    FREE(fbsurf);
 }
 
@@ -301,11 +305,19 @@ fbdev_display_create_window_surface(struct native_display *ndpy,
 
    fbsurf->width = vinfo.xres;
    fbsurf->height = vinfo.yres;
-
+#ifdef ETNA
+   fbsurf->drawable = etna_fbdev_drawable_create();
+   if(fbsurf->drawable == NULL || !etna_fbdev_drawable_update(fbsurf->drawable, &vinfo, &fbdpy->finfo))
+   {
+      FREE(fbsurf);
+      return NULL;
+   }
+#else
    if (!fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
       FREE(fbsurf);
       return NULL;
    }
+#endif
 
    fbsurf->rsurf = resource_surface_create(fbdpy->base.screen,
          nconf->color_format,
@@ -490,6 +502,8 @@ fbdev_display_init_config(struct native_display *ndpy)
    nconf->buffer_mask = (1 << NATIVE_ATTACHMENT_BACK_LEFT);
 
    nconf->window_bit = TRUE;
+
+   printf("fbdev_display succesful\n");
 
    return TRUE;
 }
