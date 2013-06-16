@@ -93,6 +93,7 @@ if HAVE_EGL_PLATFORM_FBDEV
 libegl_la_SOURCES += fbdev/native_fbdev.c
 AM_CPPFLAGS += \
 	-I$(top_srcdir)/src/gallium/winsys/sw \
+	-I$(top_srcdir)/src/gallium/winsys/etna/fbdev \
 	-DHAVE_FBDEV_BACKEND
 endif
 
