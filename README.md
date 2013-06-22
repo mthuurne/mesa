@@ -17,11 +17,10 @@ DIR=... # path to target headers and libraries
 ETNAVIV_BASE="${HOME}/projects/etna_viv"
 ETNAVIV_LIB="${ETNAVIV_BASE}/native/etnaviv"
 ETNAVIV_INC="${ETNAVIV_BASE}/native"
-GCABI_INC="${ETNAVIV_BASE}/native/include_dove"
 
 export TARGET="arm-linux-gnueabihf"
-export CFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC} -I${GCABI_INC}"
-export CXXFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC} -I${GCABI_INC}"
+export CFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC}"
+export CXXFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC}"
 export LDFLAGS="-L${DIR}/cubox/lib -L${ETNAVIV_LIB}"
 export LIBDRM_LIBS="-L${DIR}/cubox/lib -ldrm"
 export ETNA_LIBS="-letnaviv"
@@ -31,7 +30,8 @@ export ETNA_LIBS="-letnaviv"
     --enable-gallium-egl --enable-debug --with-dri-drivers=
 ```
 
-- Relies on `libetnaviv.a` and headers from the `etna_viv` project (https://github.com/laanwj/etna_viv).
+- Relies on `libetnaviv.a` and its headers from the `etna_viv` project (https://github.com/laanwj/etna_viv)
+  for low-level access and register descriptions.
 
 Mesa cross compiling
 ---------------------
