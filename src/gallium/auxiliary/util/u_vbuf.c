@@ -184,6 +184,8 @@ struct u_vbuf {
    uint32_t incompatible_vb_mask; /* each bit describes a corresp. buffer */
    /* Which buffer has a non-zero stride. */
    uint32_t nonzero_stride_vb_mask; /* each bit describes a corresp. buffer */
+   /* Which buffers are allowed (supported by hardware). */
+   uint32_t allowed_vb_mask;
 };
 
 static void *
@@ -232,6 +234,9 @@ void u_vbuf_get_caps(struct pipe_screen *screen, struct u_vbuf_caps *caps)
 
    caps->user_vertex_buffers =
       screen->get_param(screen, PIPE_CAP_USER_VERTEX_BUFFERS);
+
+   caps->max_vertex_buffers = 
+      screen->get_param(screen, PIPE_CAP_MAX_VERTEX_BUFFERS);
 }
 
 struct u_vbuf *
@@ -246,6 +251,7 @@ u_vbuf_create(struct pipe_context *pipe,
    mgr->cso_cache = cso_cache_create();
    mgr->translate_cache = translate_cache_create();
    memset(mgr->fallback_vbs, ~0, sizeof(mgr->fallback_vbs));
+   mgr->allowed_vb_mask = (1 << mgr->caps.max_vertex_buffers) - 1;
 
    mgr->uploader = u_upload_create(pipe, 1024 * 1024, 4,
                                    PIPE_BIND_VERTEX_BUFFER);
@@ -458,8 +464,8 @@ u_vbuf_translate_find_free_vb_slots(struct u_vbuf *mgr,
    unsigned fallback_vbs[VB_NUM];
    /* Set the bit for each buffer which is incompatible, or isn't set. */
    uint32_t unused_vb_mask =
-      mgr->ve->incompatible_vb_mask_all | mgr->incompatible_vb_mask |
-      ~mgr->enabled_vb_mask;
+      (mgr->ve->incompatible_vb_mask_all | mgr->incompatible_vb_mask |
+      ~mgr->enabled_vb_mask) & mgr->allowed_vb_mask;
 
    memset(fallback_vbs, ~0, sizeof(fallback_vbs));
 
@@ -762,6 +768,18 @@ u_vbuf_create_vertex_elements(struct u_vbuf *mgr, unsigned count,
       } else {
          ve->compatible_vb_mask_any |= 1 << ve->ve[i].vertex_buffer_index;
       }
+   }
+
+   if(used_buffers & ~mgr->allowed_vb_mask)
+   {
+       /* More vertex buffers are used than the hardware supports.
+        * In principle, we only need to make sure that less vertex are used,
+        * and mark some of the latter vertex buffers as incompatible.
+        * For now, mark all vertex buffers as incompatible.
+        */
+       ve->incompatible_vb_mask_any = used_buffers;
+       ve->compatible_vb_mask_any = 0;
+       ve->incompatible_elem_mask = (1<<count)-1;
    }
 
    ve->used_vb_mask = used_buffers;
