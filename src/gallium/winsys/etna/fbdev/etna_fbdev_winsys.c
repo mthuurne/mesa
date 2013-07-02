@@ -54,10 +54,9 @@ bool etna_fbdev_drawable_update(struct etna_fbdev_drawable *drawable,
 
    drawable->frontbuffer.width = vinfo->xres;
    drawable->frontbuffer.height = vinfo->yres;
-   drawable->frontbuffer.addr = finfo->smem_start;
-   // XXX compute starting address if non-zero from smem_start using stride and bpp
-   //drawable->x = vinfo->xoffset;
-   //drawable->y = vinfo->yoffset;
+   drawable->frontbuffer.addr = finfo->smem_start +
+       finfo->line_length * vinfo->yoffset +
+       vinfo->bits_per_pixel / 8 * vinfo->xoffset;
    drawable->frontbuffer.stride = finfo->line_length;
    if(!etna_fb_get_format(vinfo, &drawable->frontbuffer.rs_format, &drawable->frontbuffer.swap_rb))
    {

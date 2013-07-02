@@ -5,7 +5,7 @@ C_SOURCES := etna_asm.c \
 	etna_rs.c \
 	etna_screen.c \
 	etna_shader.c \
-	etna_tex.c
+	etna_fence.c
 
 CPP_SOURCES :=
 
