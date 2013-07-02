@@ -47,13 +47,14 @@
 #include <etnaviv/etna.h>
 #include <etnaviv/etna_mem.h>
 #include <etnaviv/etna_util.h>
+#include <etnaviv/etna_tex.h>
 
 #include "etna_rs.h"
 #include "etna_fb.h"
 #include "etna_bswap.h"
-#include "etna_tex.h"
 #include "etna_shader.h"
 #include "etna_debug.h"
+#include "etna_fence.h"
 
 #include "pipe/p_defines.h"
 #include "pipe/p_format.h"
@@ -1232,7 +1233,7 @@ static void etna_pipe_clear(struct pipe_context *pipe,
                 priv->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
                 priv->dirty_bits |= ETNA_STATE_TS;
             }
-            else if(new_clear_value != surf->clear_value) /* Queue normal RS clear for non-TS surfaces */
+            else if(unlikely(new_clear_value != surf->clear_value)) /* Queue normal RS clear for non-TS surfaces */
             {
                 etna_rs_gen_clear_surface(surf, new_clear_value);
             }
@@ -1248,7 +1249,7 @@ static void etna_pipe_clear(struct pipe_context *pipe,
         {
             priv->framebuffer.TS_DEPTH_CLEAR_VALUE = new_clear_value;
             priv->dirty_bits |= ETNA_STATE_TS;
-        } else if(new_clear_value != surf->clear_value) /* Queue normal RS clear for non-TS surfaces */
+        } else if(unlikely(new_clear_value != surf->clear_value)) /* Queue normal RS clear for non-TS surfaces */
         {
             etna_rs_gen_clear_surface(surf, new_clear_value);
         }
@@ -1289,6 +1290,13 @@ static void etna_pipe_flush(struct pipe_context *pipe,
              enum pipe_flush_flags flags)
 {
     struct etna_pipe_context_priv *priv = ETNA_PIPE(pipe);
+    if(fence)
+    {
+        if(etna_fence_new(priv->ctx, fence) != ETNA_OK)
+        {
+            printf("etna_pipe_flush: could not create fence\n");
+        }
+    }
     etna_flush(priv->ctx);
 }
 
@@ -1330,6 +1338,7 @@ static struct pipe_sampler_view *etna_pipe_create_sampler_view(struct pipe_conte
     cs->max_lod = etna_umin(sv->base.u.tex.last_level, res->base.last_level) << 5;
 
     sv->internal = cs;
+    pipe_reference_init(&sv->base.reference, 1);
     return &sv->base;
 }
 
@@ -1548,7 +1557,7 @@ static void etna_set_constant_buffer(struct pipe_context *pipe,
     assert(buf->buffer == NULL && buf->user_buffer != NULL); 
     /* support only user buffer for now */
     assert(priv->vs && priv->fs);
-    if(index == 0)
+    if(likely(index == 0))
     {
         /* copy only up to shader-specific constant size; never overwrite immediates */
         switch(shader)
@@ -1730,7 +1739,7 @@ static void *etna_pipe_transfer_map(struct pipe_context *pipe,
     ptrans->base.usage = usage;
     ptrans->base.box = *box;
 
-    if(ptrans->in_place)
+    if(likely(ptrans->in_place))
     {
         struct etna_resource_level *res_level = &resource_priv->levels[level];
         ptrans->base.stride = res_level->stride;
@@ -1764,7 +1773,7 @@ static void etna_pipe_transfer_unmap(struct pipe_context *pipe,
     assert(ptrans->base.level <= resource->base.last_level);
     struct etna_resource_level *level = &resource->levels[ptrans->base.level];
 
-    if(!ptrans->in_place)
+    if(unlikely(!ptrans->in_place))
     {
         if(resource->layout == ETNA_LAYOUT_LINEAR || resource->layout == ETNA_LAYOUT_TILED)
         {
