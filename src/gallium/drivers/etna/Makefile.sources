@@ -1,5 +1,4 @@
 C_SOURCES := etna_asm.c \
-    	etna_bswap.c \
 	etna_fb.c \
 	etna_pipe.c \
 	etna_rs.c \
