@@ -7,9 +7,10 @@
 #include "etna_fbdev_public.h"
 #include "etna_fbdev_winsys.h"
 
-#include "etnaviv/viv.h"
 #include "etna/etna_screen.h"
-#include "etna/etna_fb.h"
+
+#include <etnaviv/viv.h>
+#include <etnaviv/etna_fb.h>
 
 #include <stdio.h>
 #include <linux/fb.h>
