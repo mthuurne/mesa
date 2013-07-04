@@ -1,7 +1,8 @@
 #ifndef __ETNA_FBDEV_PRIVATE_H__
 #define __ETNA_FBDEV_PRIVATE_H__
 
-#include <etna/etna_fb.h>
+#include <etnaviv/etna_rs.h>
+
 struct etna_fbdev_drawable {
     /* Front buffer RS target.
      *

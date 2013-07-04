@@ -1,7 +1,5 @@
 C_SOURCES := etna_asm.c \
-	etna_fb.c \
 	etna_pipe.c \
-	etna_rs.c \
 	etna_screen.c \
 	etna_shader.c \
 	etna_fence.c
