@@ -52,6 +52,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_pointer.h"
+#include "os/os_thread.h"
 
 #include "common/native.h"
 #include "common/native_helper.h"
@@ -63,6 +64,8 @@
 #else
 #include "etna_fbdev_public.h"
 #endif
+
+#define FBDEV_MAX_BUFFERS (2) /* double buffering */
 
 struct fbdev_display {
    struct native_display base;
@@ -83,11 +86,22 @@ struct fbdev_surface {
    struct fbdev_display *fbdpy;
    struct resource_surface *rsurf;
    int width, height;
+   int num_buffers;
+   struct fb_var_screeninfo vinfo;
 
    unsigned int sequence_number;
 
 #ifdef ETNA
-   struct etna_fbdev_drawable *drawable;
+   /* For Android-style double/triple buffering */
+   bool terminate;
+   int buffer_head; /* next buffer to be shown */
+   int buffer_tail; /* next buffer to be posted */
+   int posted_buffers; /* number of posted buffers */
+   pipe_thread bswap_thread;
+   pipe_mutex buffer_mutex;
+   pipe_condvar buffer_available;
+   pipe_condvar buffer_posted;
+   struct etna_fbdev_drawable *drawable[FBDEV_MAX_BUFFERS];
 #else
    struct fbdev_sw_drawable drawable;
 #endif
@@ -155,6 +169,63 @@ vinfo_to_format(const struct fb_var_screeninfo *vinfo)
 
    return format;
 }
+
+#ifdef ETNA
+/* Set currently visible buffer id */
+static int fbdev_set_buffer(struct fbdev_surface *fbsurf, int buffer)
+{
+    assert(buffer < fbsurf->num_buffers);
+    fbsurf->vinfo.yoffset = buffer * fbsurf->height;
+    /* Pan framebuffer in y direction.
+     * Android uses FBIOPUT_VSCREENINFO for this; however on some hardware this does a
+     * reconfiguration of the DC every time it is called which causes flicker and slowness. 
+     * On the other hand, FBIOPAN_DISPLAY causes a smooth scroll on some hardware, 
+     * according to the Android rationale. Choose the least of both evils.
+     */
+    if (ioctl(fbsurf->fbdpy->fd, FBIOPAN_DISPLAY, &fbsurf->vinfo))
+    {
+        printf("Error: failed to run ioctl to pan display: %s\n", strerror(errno));
+        return errno;
+    }
+    return 0;
+}
+
+static PIPE_THREAD_ROUTINE(fbdev_bswap_thread, param)
+{
+    struct fbdev_surface *fbsurf = (struct fbdev_surface*)param;
+    struct pipe_screen *screen = fbsurf->fbdpy->base.screen;
+    while(!fbsurf->terminate)
+    {
+        int cur;
+        struct pipe_fence_handle *fence;
+        /* unqueue buffer */
+        pipe_mutex_lock(fbsurf->buffer_mutex);
+        while(fbsurf->posted_buffers == 0)
+        {
+           pipe_condvar_wait(fbsurf->buffer_posted, fbsurf->buffer_mutex);
+        }
+        cur = fbsurf->buffer_head;
+        pipe_mutex_unlock(fbsurf->buffer_mutex);
+        if(fbsurf->terminate)
+            break;
+        /* wait for buffer fence */
+        fence = etna_fbdev_get_fence(fbsurf->drawable[cur]);
+        if(fence)
+            screen->fence_finish(screen, fence, PIPE_TIMEOUT_INFINITE);
+        /* switch to buffer */
+        fbdev_set_buffer(fbsurf, cur);
+        /* notify that previously visible buffer is available again */
+        pipe_mutex_lock(fbsurf->buffer_mutex);
+        fbsurf->posted_buffers -= 1;
+        fbsurf->buffer_head = (fbsurf->buffer_head + 1) % fbsurf->num_buffers;
+        pipe_condvar_signal(fbsurf->buffer_available);
+        pipe_mutex_unlock(fbsurf->buffer_mutex);
+    }
+    return NULL;
+}
+
+#endif
+
 #ifndef ETNA
 static boolean
 fbdev_surface_update_drawable(struct native_surface *nsurf,
@@ -217,12 +288,9 @@ fbdev_surface_present(struct native_surface *nsurf,
          return FALSE;
       /* present the surface */
 #ifdef ETNA
-      if (etna_fbdev_drawable_update(fbsurf->drawable, &vinfo, &fbdpy->finfo)) {
-         ret = resource_surface_present(fbsurf->rsurf,
-               ctrl->natt, etna_fbdev_get_front_buffer(fbsurf->drawable));
-      }
+      assert(0); /* TODO; need to figure out size and number of buffers and such if vinfo changed */
 #else
-      if (fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
+      if (fbdev_surface_update_drawable(&fbsurf->base[0], &vinfo, &fbdpy->finfo)) {
          ret = resource_surface_present(fbsurf->rsurf,
                ctrl->natt, (void *) &fbsurf->drawable);
       }
@@ -240,10 +308,28 @@ fbdev_surface_present(struct native_surface *nsurf,
       }
    }
    else {
+      int cur;
       /* the drawable never changes */
 #ifdef ETNA
+      /* wait for buffer to be available */
+      pipe_mutex_lock(fbsurf->buffer_mutex);
+      while(fbsurf->posted_buffers >= fbsurf->num_buffers-1)
+      {
+         pipe_condvar_wait(fbsurf->buffer_available, fbsurf->buffer_mutex);
+      }
+      cur = fbsurf->buffer_tail;
+      pipe_mutex_unlock(fbsurf->buffer_mutex);
+
+      /* present */
       ret = resource_surface_present(fbsurf->rsurf,
-            ctrl->natt, etna_fbdev_get_front_buffer(fbsurf->drawable));
+            ctrl->natt, etna_fbdev_get_buffer(fbsurf->drawable[cur]));
+
+      /* post the buffer */
+      pipe_mutex_lock(fbsurf->buffer_mutex);
+      fbsurf->posted_buffers += 1;
+      fbsurf->buffer_tail = (fbsurf->buffer_tail + 1) % fbsurf->num_buffers;
+      pipe_condvar_signal(fbsurf->buffer_posted);
+      pipe_mutex_unlock(fbsurf->buffer_mutex);
 #else
       ret = resource_surface_present(fbsurf->rsurf,
             ctrl->natt, (void *) &fbsurf->drawable);
@@ -263,10 +349,23 @@ static void
 fbdev_surface_destroy(struct native_surface *nsurf)
 {
    struct fbdev_surface *fbsurf = fbdev_surface(nsurf);
+   int buf;
 
    resource_surface_destroy(fbsurf->rsurf);
 #ifdef ETNA
-   etna_fbdev_drawable_destroy(fbsurf->drawable);
+   /* Terminate buffer swap thread, wait for it to exit */
+   pipe_mutex_lock(fbsurf->buffer_mutex);
+   fbsurf->terminate = 1;
+   pipe_condvar_signal(fbsurf->buffer_posted);
+   pipe_mutex_unlock(fbsurf->buffer_mutex);
+   pipe_thread_wait(fbsurf->bswap_thread);
+   pipe_thread_destroy(fbsurf->bswap_thread);
+   /* Clean up synchronization primitives */
+   pipe_condvar_destroy(fbsurf->buffer_posted);
+   pipe_condvar_destroy(fbsurf->buffer_available);
+   pipe_mutex_destroy(fbsurf->buffer_mutex);
+   for(buf=0; buf<fbsurf->num_buffers; ++buf)
+       etna_fbdev_drawable_destroy(fbsurf->drawable[buf]);
 #endif
    FREE(fbsurf);
 }
@@ -279,6 +378,7 @@ fbdev_display_create_window_surface(struct native_display *ndpy,
    struct fbdev_display *fbdpy = fbdev_display(ndpy);
    struct fbdev_surface *fbsurf;
    struct fb_var_screeninfo vinfo;
+   int buf;
 
    /* there is only one native window: NULL */
    if (win)
@@ -295,22 +395,39 @@ fbdev_display_create_window_surface(struct native_display *ndpy,
       vinfo = fbdpy->config_vinfo;
    }
    else {
-      memset(&vinfo, 0, sizeof(vinfo));
+      memset(&fbsurf->vinfo, 0, sizeof(vinfo));
       if (ioctl(fbdpy->fd, FBIOGET_VSCREENINFO, &vinfo)) {
          FREE(fbsurf);
          return NULL;
       }
    }
 
+   /* determine number of buffers */
+   fbsurf->num_buffers = vinfo.yres_virtual / vinfo.yres;
    fbsurf->width = vinfo.xres;
    fbsurf->height = vinfo.yres;
 #ifdef ETNA
-   fbsurf->drawable = etna_fbdev_drawable_create();
-   if(fbsurf->drawable == NULL || !etna_fbdev_drawable_update(fbsurf->drawable, &vinfo, &fbdpy->finfo))
+   printf("native_fbdev: %i buffers of %ix%i\n",
+           fbsurf->num_buffers, fbsurf->width, fbsurf->height);
+   for(buf=0; buf<fbsurf->num_buffers; ++buf)
    {
-      FREE(fbsurf);
-      return NULL;
-   }
+       fbsurf->drawable[buf] = etna_fbdev_drawable_create(fbdpy->base.screen, 
+               /* want_fence */ fbsurf->num_buffers > 1);
+       if(fbsurf->drawable[buf] == NULL || 
+          !etna_fbdev_drawable_update(fbsurf->drawable[buf], &vinfo, &fbdpy->finfo, 
+              0, vinfo.yres*buf, vinfo.xres, vinfo.yres))
+       {
+          FREE(fbsurf);
+          return NULL;
+       }
+    }
+    fbsurf->buffer_head = 0;
+    fbsurf->buffer_tail = 0;
+    fbsurf->posted_buffers = 0;
+    pipe_mutex_init(fbsurf->buffer_mutex);
+    pipe_condvar_init(fbsurf->buffer_available);
+    pipe_condvar_init(fbsurf->buffer_posted);
+    fbsurf->bswap_thread = pipe_thread_create(fbdev_bswap_thread, fbsurf);
 #else
    if (!fbdev_surface_update_drawable(&fbsurf->base, &vinfo, &fbdpy->finfo)) {
       FREE(fbsurf);
@@ -333,6 +450,7 @@ fbdev_display_create_window_surface(struct native_display *ndpy,
    fbsurf->base.present = fbdev_surface_present;
    fbsurf->base.validate = fbdev_surface_validate;
    fbsurf->base.wait = fbdev_surface_wait;
+   fbsurf->vinfo = vinfo;
 
    return &fbsurf->base;
 }
