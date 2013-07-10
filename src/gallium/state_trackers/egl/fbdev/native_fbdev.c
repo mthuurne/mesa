@@ -93,7 +93,6 @@ struct fbdev_surface {
 
 #ifdef ETNA
    /* For Android-style double/triple buffering */
-   /* XXX config: number of requested buffers, vsync */
    volatile bool terminate; /* terminate flag for buffer swap thread */
    int buffer_head; /* next buffer to be shown */
    int buffer_tail; /* next buffer to be posted */
@@ -340,8 +339,6 @@ fbdev_surface_present(struct native_surface *nsurf,
    struct fbdev_display *fbdpy = fbsurf->fbdpy;
    boolean ret = FALSE;
 
-   if (ctrl->swap_interval)
-      return FALSE;
    if (ctrl->natt != NATIVE_ATTACHMENT_BACK_LEFT)
       return FALSE;
 
@@ -378,14 +375,19 @@ fbdev_surface_present(struct native_surface *nsurf,
 #ifdef ETNA
       if(fbsurf->num_buffers > 1)
       {
-          /* wait for buffer to be available */
-          pipe_mutex_lock(fbsurf->buffer_mutex);
-          while(fbsurf->posted_buffers >= fbsurf->num_buffers-1)
-          {
-             pipe_condvar_wait(fbsurf->buffer_available, fbsurf->buffer_mutex);
-          }
-          cur = fbsurf->buffer_tail;
-          pipe_mutex_unlock(fbsurf->buffer_mutex);
+         /* wait for buffer to be available */
+         pipe_mutex_lock(fbsurf->buffer_mutex);
+         while(fbsurf->posted_buffers >= fbsurf->num_buffers-1)
+         {
+            pipe_condvar_wait(fbsurf->buffer_available, fbsurf->buffer_mutex);
+         }
+         cur = fbsurf->buffer_tail;
+         pipe_mutex_unlock(fbsurf->buffer_mutex);
+      } else if(ctrl->swap_interval) {
+         if (ioctl(fbsurf->fbdpy->fd, FBIO_WAITFORVSYNC, 0))
+         {
+            printf("Warning: failed to wait for vsync\n");
+         }
       }
 
       /* present */
@@ -588,10 +590,10 @@ fbdev_display_get_param(struct native_display *ndpy,
 
    switch (param) {
    case NATIVE_PARAM_PRESERVE_BUFFER:
+   case NATIVE_PARAM_MAX_SWAP_INTERVAL:
       val = 1;
       break;
    case NATIVE_PARAM_USE_NATIVE_BUFFER:
-   case NATIVE_PARAM_MAX_SWAP_INTERVAL:
    default:
       val = 0;
       break;
