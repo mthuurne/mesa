@@ -15,29 +15,16 @@
 #include <stdio.h>
 #include <linux/fb.h>
 
-struct etna_fbdev_drawable *etna_fbdev_drawable_create(struct pipe_screen *screen, bool want_fence)
+struct etna_fbdev_drawable *etna_fbdev_drawable_create(struct pipe_screen *screen, bool want_fence,
+          const struct fb_var_screeninfo *vinfo,
+          const struct fb_fix_screeninfo *finfo,
+          unsigned xoffset, unsigned yoffset,
+          unsigned width, unsigned height)
 {
-    struct etna_fbdev_drawable *drawable = CALLOC_STRUCT(etna_fbdev_drawable);
-    drawable->screen = screen;
-    drawable->buffer.want_fence = want_fence;
-    return drawable;
-}
+   struct etna_fbdev_drawable *drawable = CALLOC_STRUCT(etna_fbdev_drawable);
+   drawable->screen = screen;
+   drawable->buffer.want_fence = want_fence;
 
-/* Destroy drawable */
-void etna_fbdev_drawable_destroy(struct etna_fbdev_drawable *drawable)
-{
-   /* release fence */
-   drawable->screen->fence_reference(drawable->screen, &drawable->buffer.fence, NULL);
-   FREE(drawable);
-}
-
-/* Update dimensions and render target if needed */
-bool etna_fbdev_drawable_update(struct etna_fbdev_drawable *drawable,
-                              const struct fb_var_screeninfo *vinfo,
-                              const struct fb_fix_screeninfo *finfo,
-                              unsigned xoffset, unsigned yoffset,
-                              unsigned width, unsigned height)
-{
    /* sanitize the values */
    if (xoffset + width > vinfo->xres_virtual) {
       if (xoffset > vinfo->xres_virtual)
@@ -52,18 +39,30 @@ bool etna_fbdev_drawable_update(struct etna_fbdev_drawable *drawable,
          height = vinfo->yres_virtual - yoffset;
    }
 
-   drawable->buffer.width = vinfo->xres;
-   drawable->buffer.height = vinfo->yres;
+   drawable->buffer.width = width;
+   drawable->buffer.height = height;
    drawable->buffer.addr = finfo->smem_start +
       finfo->line_length * yoffset +
       vinfo->bits_per_pixel / 8 * xoffset;
    drawable->buffer.stride = finfo->line_length;
 
-   if(!etna_fb_get_format(vinfo, &drawable->buffer.rs_format, &drawable->buffer.swap_rb))
+   if(width == 0 || height == 0 ||
+      !etna_fb_get_format(vinfo, &drawable->buffer.rs_format, &drawable->buffer.swap_rb))
    {
-      return false;
+      FREE(drawable);
+      return NULL;
    }
-   return width && height;
+   return drawable;
+}
+
+/* Destroy drawable */
+void etna_fbdev_drawable_destroy(struct etna_fbdev_drawable *drawable)
+{
+   /* release fence */
+   if(drawable == NULL)
+       return;
+   drawable->screen->fence_reference(drawable->screen, &drawable->buffer.fence, NULL);
+   FREE(drawable);
 }
 
 /* Get handle for passing to flush_frontbuffer */
