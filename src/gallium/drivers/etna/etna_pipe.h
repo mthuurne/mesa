@@ -20,7 +20,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-/* Gallium state experiments -- WIP
+/* Gallium driver main header file
  */
 #ifndef H_ETNA_PIPE
 #define H_ETNA_PIPE
@@ -110,7 +110,6 @@ struct etna_resource
     struct etna_vidmem *ts; /* Tile status video memory */
 
     struct etna_resource_level levels[ETNA_NUM_LOD];
-    /* XXX uint32_t clear_value; */
 };
 
 struct etna_surface
