@@ -175,7 +175,8 @@ vinfo_to_format(const struct fb_var_screeninfo *vinfo)
 static int fbdev_set_buffer(struct fbdev_surface *fbsurf, int buffer)
 {
     assert(buffer < fbsurf->num_buffers);
-    fbsurf->vinfo.activate = FB_ACTIVATE_VBL;
+    /* Is this supposed to wait for vblank or just postpone the operation asynchronously? */
+    //fbsurf->vinfo.activate = FB_ACTIVATE_VBL;
     fbsurf->vinfo.yoffset = buffer * fbsurf->height;
     /* Pan framebuffer in y direction.
      * Android uses FBIOPUT_VSCREENINFO for this; however on some hardware this does a
