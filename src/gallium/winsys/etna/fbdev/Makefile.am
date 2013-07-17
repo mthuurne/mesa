@@ -24,6 +24,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers \
+   -I$(top_srcdir)/src/gallium/state_trackers/egl \
 	$(GALLIUM_CFLAGS) \
 	$(ETNA_CFLAGS)
 
