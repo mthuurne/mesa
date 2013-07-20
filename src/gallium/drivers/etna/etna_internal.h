@@ -65,13 +65,6 @@ struct etna_pipe_specs
 /** Compiled Gallium state. All the different compiled state atoms are woven together and uploaded
  * only when it is necessary to synchronize the state, for example before rendering. */
 
-/* Registers that don't fit into any other category but that are needed for setup */
-struct compiled_base_setup_state
-{
-    uint32_t PA_W_CLIP_LIMIT;
-    uint32_t GL_VERTEX_ELEMENT_CONFIG;
-};
-
 /* Compiled pipe_rasterizer_state */
 struct compiled_rasterizer_state
 {
@@ -253,7 +246,7 @@ struct compiled_shader_state
 struct etna_3d_state
 {
     unsigned num_vertex_elements; /* number of elements in FE_VERTEX_ELEMENT_CONFIG */
-    
+
     uint32_t /*00600*/ FE_VERTEX_ELEMENT_CONFIG[VIVS_FE_VERTEX_ELEMENT_CONFIG__LEN];
     uint32_t /*00644*/ FE_INDEX_STREAM_BASE_ADDR;
     uint32_t /*00648*/ FE_INDEX_STREAM_CONTROL;
@@ -270,7 +263,7 @@ struct etna_3d_state
     uint32_t /*00820*/ VS_INPUT[VIVS_VS_INPUT__LEN];
     uint32_t /*00830*/ VS_LOAD_BALANCING;
     uint32_t /*00838*/ VS_START_PC;
-    
+
     uint32_t /*00A00*/ PA_VIEWPORT_SCALE_X;
     uint32_t /*00A04*/ PA_VIEWPORT_SCALE_Y;
     uint32_t /*00A08*/ PA_VIEWPORT_SCALE_Z;
@@ -322,7 +315,7 @@ struct etna_3d_state
     uint32_t /*014A8*/ PE_DITHER[2];
     uint32_t /*01460*/ PE_PIPE_COLOR_ADDR[VIVS_PE_PIPE__LEN];
     uint32_t /*01480*/ PE_PIPE_DEPTH_ADDR[VIVS_PE_PIPE__LEN];
-    
+
     uint32_t /*01604*/ RS_CONFIG;
     uint32_t /*01608*/ RS_SOURCE_ADDR;
     uint32_t /*0160C*/ RS_SOURCE_STRIDE;
@@ -340,20 +333,21 @@ struct etna_3d_state
     uint32_t /*01664*/ TS_DEPTH_STATUS_BASE;
     uint32_t /*01668*/ TS_DEPTH_SURFACE_BASE;
     uint32_t /*0166C*/ TS_DEPTH_CLEAR_VALUE;
-    
+
     uint32_t /*016A0*/ RS_EXTRA_CONFIG;
-    
+
     uint32_t /*02000*/ TE_SAMPLER_CONFIG0[VIVS_TE_SAMPLER__LEN];
     uint32_t /*02040*/ TE_SAMPLER_SIZE[VIVS_TE_SAMPLER__LEN];
     uint32_t /*02080*/ TE_SAMPLER_LOG_SIZE[VIVS_TE_SAMPLER__LEN];
     uint32_t /*020C0*/ TE_SAMPLER_LOD_CONFIG[VIVS_TE_SAMPLER__LEN];
     uint32_t /*02400*/ TE_SAMPLER_LOD_ADDR[VIVS_TE_SAMPLER_LOD_ADDR__LEN][VIVS_TE_SAMPLER__LEN];
-   
+
     uint32_t /*03814*/ GL_VERTEX_ELEMENT_CONFIG;
     uint32_t /*03818*/ GL_MULTI_SAMPLE_CONFIG;
     uint32_t /*0381C*/ GL_VARYING_TOTAL_COMPONENTS;
     uint32_t /*03820*/ GL_VARYING_NUM_COMPONENTS;
     uint32_t /*03828*/ GL_VARYING_COMPONENT_USE[VIVS_GL_VARYING_COMPONENT_USE__LEN];
+    uint32_t /*0384C*/ GL_API_MODE;
 
     // XX uint32_t /*04000*/ VS_INST_MEM[VIVS_VS_INST_MEM__LEN];
     uint32_t /*05000*/ VS_UNIFORMS[VIVS_VS_UNIFORMS__LEN];
