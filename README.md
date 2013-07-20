@@ -48,6 +48,7 @@ In many cases these can be copied from the device, after installing the appropri
   This has to be done manually by configuring and building Mesa for the host first, backing up the executable
   `src/glsl/builtin_compiler/builtin_compiler`, and copying it back after `make clean` and configuring for cross compile. 
 
+
     ./configure
     make
     cp src/glsl/builtin_compiler/builtin_compiler src/glsl/builtin_compiler/builtin_compiler.x86
@@ -55,7 +56,28 @@ In many cases these can be copied from the device, after installing the appropri
     ./configure --target=... (see above)
     cp src/glsl/builtin_compiler/builtin_compiler.x86 src/glsl/builtin_compiler/builtin_compiler
 
+
   You don't need to re-generate `builtin_compiler` unless there are changes in src/glsl.
+
+Setup
+===================
+
+I use this script to set up the framebuffer console for (double or single buffered) rendering,
+as well as prevent blanking and avoid screen corruption by hiding the cursor.
+
+    #!/bin/bash
+    # Set to usable resolution (double buffered)
+    fbset 1280x1024-60 -vyres 2048 -depth 32
+    # Set to usable resolution (single buffered)
+    #fbset 1280x1024-60 -vyres 1024 -depth 32
+
+    # Disable automatic blanking
+    echo -e '\033[9;0]' > /dev/tty1
+    echo 0 > /sys/class/graphics/fb0/blank
+
+    # Disable blinking cursor
+    echo -e '\033[?17;0;0c' > /dev/tty1
+
 
 Testing
 ====================
