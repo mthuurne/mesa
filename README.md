@@ -78,11 +78,23 @@ as well as prevent blanking and avoid screen corruption by hiding the cursor.
     # Disable blinking cursor
     echo -e '\033[?17;0;0c' > /dev/tty1
 
+Switching between Etna en Swrast
+--------------------------------
+Sometimes it is useful to compare the rendering from etna to the software rasterizer;
+this can be done with the environment variable `EGL_FBDEV_DRIVER`, i.e.
+
+    # Run with etna driver
+    export EGL_FBDEV_DRIVER=etna
+    (run EGL demo...)
+
+    # Run with software rasterizer
+    export EGL_FBDEV_DRIVER=swrast
+    (run EGL demo...)
 
 Testing
 ====================
 
-This section lists some tests and demos that can be used for exercising the driver.
+This section lists some tests and demos that can be used to exercise the driver.
 
 Mesatest
 -------------
