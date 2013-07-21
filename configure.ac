@@ -125,6 +125,8 @@ if test "x$GCC" = xyes -a "x$acv_mesa_CLANG" = xno; then
 fi
 AM_CONDITIONAL([GEN_ASM_OFFSETS], test "x$GEN_ASM_OFFSETS" = xyes)
 
+AC_ARG_VAR(LIBTOOL_FOR_BUILD, Path to the libtool instance to be used for building native executables during cross compilation.)
+
 dnl Make sure the pkg-config macros are defined
 m4_ifndef([PKG_PROG_PKG_CONFIG],
     [m4_fatal([Could not locate the pkg-config autoconf macros.
