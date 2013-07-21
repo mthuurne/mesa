@@ -24,7 +24,10 @@ export CFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC}"
 export CXXFLAGS="-I${DIR}/cubox/include -I${ETNAVIV_INC}"
 export LDFLAGS="-L${DIR}/cubox/lib -L${ETNAVIV_LIB}"
 export LIBDRM_LIBS="-L${DIR}/cubox/lib -ldrm"
-export ETNA_LIBS="-letnaviv"
+
+export ETNA_LIBS="-letnaviv" # important!
+export LIBTOOL_FOR_BUILD="/usr/bin/libtool" # important!
+
 ./configure --target=${TARGET} --host=${TARGET} \
     --enable-gles2 --enable-gles1 --disable-glx --enable-egl --enable-dri \
     --with-gallium-drivers=swrast,etna --with-egl-platforms=fbdev \
@@ -39,25 +42,6 @@ Mesa cross compiling
 - libexpat and libdrm need to be available on the target (neither is used at the moment, but they are 
 dependencies for Mesa).
 In many cases these can be copied from the device, after installing the appropriate development package.
-
-- `src/glsl/builtin_compiler/builtin_compiler` must be built on the host instead of the target hardware,
-  otherwise you'll get an error:
-
-    ./.libs/libglslcore.a: could not read symbols: Archive has no index; run ranlib to add one
-
-  This has to be done manually by configuring and building Mesa for the host first, backing up the executable
-  `src/glsl/builtin_compiler/builtin_compiler`, and copying it back after `make clean` and configuring for cross compile. 
-
-
-    ./configure
-    make
-    cp src/glsl/builtin_compiler/builtin_compiler src/glsl/builtin_compiler/builtin_compiler.x86
-    make clean
-    ./configure --target=... (see above)
-    cp src/glsl/builtin_compiler/builtin_compiler.x86 src/glsl/builtin_compiler/builtin_compiler
-
-
-  You don't need to re-generate `builtin_compiler` unless there are changes in src/glsl.
 
 Setup
 ===================
@@ -80,7 +64,7 @@ as well as prevent blanking and avoid screen corruption by hiding the cursor.
 
 Switching between Etna en Swrast
 --------------------------------
-Sometimes it is useful to compare the rendering from etna to the software rasterizer;
+Frequently it is useful to compare the rendering from etna to the software rasterizer;
 this can be done with the environment variable `EGL_FBDEV_DRIVER`, i.e.
 
     # Run with etna driver
@@ -128,21 +112,21 @@ Run:
 Support matrix (cubox, v2, gc600):
 
     [Scene] build    -> renders
-    [Scene] shading  -> renders w/ gouraud, with phong it misses POW
+    [Scene] shading  -> renders
     [Scene] texture  -> renders
     [Scene] effect2d -> renders
+    [Scene] bump     -> renders
 
     Corrupted:
     [Scene] shadow    -> rendering corrupted about every 1/2 frames
 
     Shader assertion:
-    [Scene] refract  -> missing instruction POW
-    [Scene] bump     -> missing instruction POW
-    [Scene] jellyfish -> missing instruction LRP
-    [Scene] ideas    -> missing instruction POW
+    [Scene] refract  -> missing instruction CMP
+    [Scene] jellyfish -> missing instruction SIN
+    [Scene] ideas    -> missing instruction KILP
     [Scene] loop      -> missing loops support
-    [Scene] buffer   -> missing instruction LRP
-    [Scene] terrain   -> missing instruction LRP
+    [Scene] buffer   -> missing instruction CMP
+    [Scene] terrain   -> missing instruction CMP
 
     Shows nothing:
     [Scene] clear    -> shows nothing (is it supposed to?)
